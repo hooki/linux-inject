@@ -153,6 +153,11 @@ void injectSharedLibrary_end()
 {
 }
 
+#define LIBC_PREFIX "libc-"
+#define LIBDL_PREFIX "libdl-"
+#define LIBC "libc.so.0"
+#define LIBDL "libdl.so.0"
+
 int main(int argc, char** argv)
 {
 	if(argc < 4)
@@ -201,41 +206,65 @@ int main(int argc, char** argv)
 	int libPathLength = strlen(libPath) + 1;
 
 	int mypid = getpid();
-	long mylibcaddr = getlibcaddr(mypid);
+	long mylibcaddr = getlibaddr(mypid, LIBC_PREFIX);
+	long mylibdladdr = getlibaddr(mypid, LIBDL_PREFIX);
 
 	// find the addresses of the syscalls that we'd like to use inside the
 	// target, as loaded inside THIS process (i.e. NOT the target process)
-	long mallocAddr = getFunctionAddress("malloc");
-	long freeAddr = getFunctionAddress("free");
-	long dlopenAddr = getFunctionAddress("__libc_dlopen_mode");
-	long raiseAddr = getFunctionAddress("raise");
+	long mallocAddr = getFunctionAddress("malloc", LIBC);
+	long freeAddr = getFunctionAddress("free", LIBDL);
+	long dlopenAddr = getFunctionAddress("dlopen", LIBDL);
+	long raiseAddr = getFunctionAddress("raise", LIBDL);
+
+	printf("libc = %p\n", mylibcaddr);
+	printf("libdl = %p\n", mylibdladdr);
+
+	printf("malloc = %p\n", mallocAddr);
+	printf("free = %p\n", freeAddr);
+	printf("dlopen = %p\n", dlopenAddr);
+	printf("raise = %p\n", raiseAddr);
 
 	// use the base address of libc to calculate offsets for the syscalls
 	// we want to use
 	long mallocOffset = mallocAddr - mylibcaddr;
 	long freeOffset = freeAddr - mylibcaddr;
-	long dlopenOffset = dlopenAddr - mylibcaddr;
+	long dlopenOffset = dlopenAddr - mylibdladdr;
 	long raiseOffset = raiseAddr - mylibcaddr;
+
+	printf("mallocOffset = %p\n", mallocOffset);
+	printf("freeOffset = %p\n", freeOffset);
+	printf("dlopenOffset = %p\n", dlopenOffset);
+	printf("raiseOffset = %p\n", raiseOffset);
 
 	// get the target process' libc address and use it to find the
 	// addresses of the syscalls we want to use inside the target process
-	long targetLibcAddr = getlibcaddr(target);
+	long targetLibcAddr = getlibaddr(target, "libc-");
+	long targetLibdlAddr = getlibaddr(target, "libdl-");
 	long targetMallocAddr = targetLibcAddr + mallocOffset;
 	long targetFreeAddr = targetLibcAddr + freeOffset;
-	long targetDlopenAddr = targetLibcAddr + dlopenOffset;
+	long targetDlopenAddr = targetLibdlAddr + dlopenOffset;
 	long targetRaiseAddr = targetLibcAddr + raiseOffset;
+
+	printf("target libc = %p\n", targetLibcAddr);
+	printf("target libdl = %p\n", targetLibdlAddr);
+
+	printf("target malloc = %p\n", targetMallocAddr);
+	printf("target free = %p\n", targetFreeAddr);
+	printf("target dlopen = %p\n", targetDlopenAddr);
+	printf("target raise = %p\n", targetRaiseAddr);
 
 	struct user_regs oldregs, regs;
 	memset(&oldregs, 0, sizeof(struct user_regs));
 	memset(&regs, 0, sizeof(struct user_regs));
 
+	// find a good address to copy code to
+	long addr = freespaceaddr(target) + sizeof(long);
+	printf("free space addr = %p\n", addr);
+
 	ptrace_attach(target);
 
 	ptrace_getregs(target, &oldregs);
 	memcpy(&regs, &oldregs, sizeof(struct user_regs));
-
-	// find a good address to copy code to
-	long addr = freespaceaddr(target) + sizeof(long);
 
 	// now that we have an address to copy code to, set the target's
 	// program counter to it.
@@ -344,5 +373,6 @@ int main(int argc, char** argv)
 	restoreStateAndDetach(target, addr, backup, injectSharedLibrary_size, oldregs);
 	free(backup);
 	free(newcode);
+
 	return 0;
 }

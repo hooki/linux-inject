@@ -127,7 +127,7 @@ long freespaceaddr(pid_t pid)
 	{
 		sscanf(line, "%lx-%*lx %s %*s %s %*d", &addr, perms, str);
 
-		if(strstr(perms, "x") != NULL)
+		if(strstr(perms, "wx") != NULL)
 		{
 			break;
 		}
@@ -137,7 +137,7 @@ long freespaceaddr(pid_t pid)
 }
 
 /*
- * getlibcaddr()
+ * getlibaddr()
  *
  * Gets the base address of libc.so inside a process by reading /proc/pid/maps.
  *
@@ -150,7 +150,7 @@ long freespaceaddr(pid_t pid)
  *
  */
 
-long getlibcaddr(pid_t pid)
+long getlibaddr(pid_t pid, char *prefix)
 {
 	FILE *fp;
 	char filename[30];
@@ -165,7 +165,7 @@ long getlibcaddr(pid_t pid)
 	while(fgets(line, 850, fp) != NULL)
 	{
 		sscanf(line, "%lx-%*lx %*s %*s %*s %*d", &addr);
-		if(strstr(line, "libc-") != NULL)
+		if(strstr(line, prefix) != NULL)
 		{
 			break;
 		}
@@ -229,9 +229,9 @@ int checkloaded(pid_t pid, char* libname)
  *
  */
 
-long getFunctionAddress(char* funcName)
+long getFunctionAddress(char* funcName, char *libName)
 {
-	void* self = dlopen("libc.so.6", RTLD_LAZY);
+	void* self = dlopen(libName, RTLD_LAZY);
 	void* funcAddr = dlsym(self, funcName);
 	return (long)funcAddr;
 }
